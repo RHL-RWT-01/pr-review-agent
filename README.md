@@ -5,6 +5,7 @@ Backend service that performs automated code reviews using a multi-agent AI syst
 ## Features
 
 - **Multi-Agent Review System**: Specialized agents for different aspects:
+
   - **Logic Agent**: Reviews code logic, correctness, and potential bugs
   - **Security Agent**: Identifies security vulnerabilities and risks
   - **Performance Agent**: Analyzes performance implications
@@ -16,14 +17,17 @@ Backend service that performs automated code reviews using a multi-agent AI syst
 ## Setup
 
 1. **Install dependencies**:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 2. **Set environment variables**:
    Create a `.env` file in the root directory:
+
    ```
-   OPENAI_API_KEY=your_openai_api_key_here
+   OPEN_ROUTER_API_KEY=your_openrouter_api_key_here
+   OPENROUTER_MODEL=deepseek/deepseek-chat-v3.1:free  # Optional, defaults to DeepSeek V3.1 (FREE)
    GITHUB_TOKEN=your_github_token_here  # Optional, for fetching PRs
    ```
 
@@ -41,17 +45,6 @@ curl -X POST http://localhost:8000/review/pr \
   -H "Content-Type: application/json" \
   -d '{
     "pr_url": "https://github.com/owner/repo/pull/123"
-  }'
-```
-
-### Review a Raw Diff
-
-```bash
-curl -X POST http://localhost:8000/review/diff \
-  -H "Content-Type: application/json" \
-  -d '{
-    "diff": "diff --git a/file.py b/file.py\n...",
-    "context": "Optional context about the changes"
   }'
 ```
 
@@ -94,14 +87,21 @@ curl http://localhost:8000/health
 
 - **FastAPI**: HTTP API framework
 - **Multi-Agent Orchestration**: Independent specialist agents run in parallel
-- **OpenAI Integration**: Uses GPT models for intelligent code analysis
+- **OpenRouter + DeepSeek Integration**: Uses DeepSeek V3.1 (FREE, 671B parameters) for intelligent code analysis
 - **Extensible Design**: Easy to add new agents or customize existing ones
 
 ## Environment Variables
 
-- `OPENAI_API_KEY` (required): Your OpenAI API key
+- `OPEN_ROUTER_API_KEY` (required): Your OpenRouter API key
+- `OPENROUTER_MODEL` (optional): Model to use (default: deepseek/deepseek-chat-v3.1:free)
 - `GITHUB_TOKEN` (optional): GitHub personal access token for fetching PRs
-- `OPENAI_MODEL` (optional): Model to use (default: gpt-4-turbo-preview)
 - `MAX_DIFF_SIZE` (optional): Maximum diff size in characters (default: 100000)
 
+## Why DeepSeek V3.1?
+
+- **FREE**: $0/M input and output tokens
+- **Powerful**: 671B parameters (37B active) with hybrid reasoning
+- **Fast**: Optimized with FP8 microscaling for efficient inference
+- **Large Context**: Supports up to 128K tokens
+- **Excellent for Code**: Great at code generation, debugging, and analysis
 

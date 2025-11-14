@@ -10,12 +10,6 @@ class PRReviewRequest(BaseModel):
     pr_url: str = Field(..., description="GitHub PR URL (e.g., https://github.com/RHL-RWT-01/civicsync-be/pull/13)")
 
 
-class DiffReviewRequest(BaseModel):
-    """Request to review a raw diff"""
-    diff: str = Field(..., description="Raw unified diff content")
-    context: Optional[str] = Field(None, description="Optional context about the changes")
-
-
 class ReviewComment(BaseModel):
     """A single review comment from an agent"""
     agent: str = Field(..., description="Agent that generated this comment (logic, security, perf, style)")

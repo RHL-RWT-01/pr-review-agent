@@ -18,8 +18,16 @@ async def logic_agent(diff: str, context: str = "") -> List[ReviewComment]:
     Returns:
         List of review comments
     """
-    client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    model = os.getenv('OPENAI_MODEL', 'gpt-4-turbo-preview')
+    # Use OpenRouter API with DeepSeek (OpenAI-compatible)
+    client = AsyncOpenAI(
+        api_key=os.getenv('OPEN_ROUTER_API_KEY'),
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={
+            "HTTP-Referer": "https://github.com/pr-review-agent",
+            "X-Title": "PR Review Agent"
+        }
+    )
+    model = os.getenv('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3.1:free')
     
     system_prompt = """You are a senior software engineer reviewing code changes for logical correctness.
 Focus on:
@@ -45,7 +53,9 @@ Format your response as JSON array with objects containing: file, line, severity
 
 {f"Context: {context}" if context else ""}
 
-Return a JSON array of issues found. If no issues, return an empty array []."""
+Return a JSON array of issues found. If no issues, return an empty array [].
+
+IMPORTANT: Return ONLY valid JSON, no markdown formatting, no code blocks."""
 
     try:
         response = await client.chat.completions.create(
@@ -54,14 +64,21 @@ Return a JSON array of issues found. If no issues, return an empty array []."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,
-            response_format={"type": "json_object"}
+            temperature=0.3
         )
         
         content = response.choices[0].message.content
         
-        # Parse the response
+        # Parse the response - handle markdown code blocks if present
         import json
+        import re
+        
+        # Remove markdown code blocks if present
+        content = content.strip()
+        if content.startswith('```'):
+            content = re.sub(r'^```(?:json)?\n?', '', content)
+            content = re.sub(r'\n?```$', '', content)
+        
         result = json.loads(content)
         
         # Handle different response formats

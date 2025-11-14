@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from app.schemas import (
     PRReviewRequest,
-    DiffReviewRequest,
     ReviewResponse,
     HealthResponse
 )
@@ -21,8 +20,8 @@ from app.orchestrator import review_diff
 load_dotenv()
 
 # Validate required environment variables
-if not os.getenv('OPENAI_API_KEY'):
-    raise ValueError("OPENAI_API_KEY environment variable is required")
+if not os.getenv('OPEN_ROUTER_API_KEY'):
+    raise ValueError("OPEN_ROUTER_API_KEY environment variable is required")
 
 
 @asynccontextmanager
@@ -30,8 +29,9 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown"""
     # Startup
     print("PR Review Agent starting up...")
-    print(f"   Model: {os.getenv('OPENAI_MODEL', 'gpt-4-turbo-preview')}")
+    print(f"   Model: {os.getenv('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3.1:free')}")
     print(f"   GitHub Token: {'Set' if os.getenv('GITHUB_TOKEN') else 'Not set'}")
+    print(f"   Using: OpenRouter API (DeepSeek V3.1 - FREE)")
     
     yield
     
@@ -65,8 +65,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "health": "/health",
-            "review_pr": "/review/pr",
-            "review_diff": "/review/diff"
+            "review_pr": "/review/pr"
         }
     }
 
@@ -135,55 +134,6 @@ async def review_github_pr(request: PRReviewRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to review PR: {str(e)}"
-        )
-
-
-@app.post("/review/diff", response_model=ReviewResponse)
-async def review_raw_diff(request: DiffReviewRequest):
-    """
-    Review a raw diff
-    
-    Args:
-        request: Diff review request with raw diff content
-        
-    Returns:
-        Review results with comments from all agents
-    """
-    try:
-        # Validate diff
-        if not request.diff or not request.diff.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Diff content is required"
-            )
-        
-        # Check diff size
-        max_diff_size = int(os.getenv('MAX_DIFF_SIZE', 100000))
-        if len(request.diff) > max_diff_size:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"Diff too large ({len(request.diff)} chars, max {max_diff_size})"
-            )
-        
-        print(f"Running multi-agent review on raw diff...")
-        
-        # Run review
-        review_result = await review_diff(request.diff, request.context or "")
-        
-        print(f"Review complete: {review_result.stats.total_comments} comments")
-        
-        return ReviewResponse(
-            status="success",
-            review=review_result
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error reviewing diff: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to review diff: {str(e)}"
         )
 
 
