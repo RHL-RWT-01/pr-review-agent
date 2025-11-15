@@ -94,14 +94,8 @@ curl http://localhost:8000/health
 
 - `OPEN_ROUTER_API_KEY` (required): Your OpenRouter API key
 - `OPENROUTER_MODEL` (optional): Model to use (default: deepseek/deepseek-chat-v3.1:free)
-- `GITHUB_TOKEN` (optional): GitHub personal access token for fetching PRs
+- `GITHUB_TOKEN` GitHub personal access token for fetching PRs
 - `MAX_DIFF_SIZE` (optional): Maximum diff size in characters (default: 100000)
 
-## Why DeepSeek V3.1?
 
-- **FREE**: $0/M input and output tokens
-- **Powerful**: 671B parameters (37B active) with hybrid reasoning
-- **Fast**: Optimized with FP8 microscaling for efficient inference
-- **Large Context**: Supports up to 128K tokens
-- **Excellent for Code**: Great at code generation, debugging, and analysis
 
