@@ -6,3 +6,8 @@ httpx
 openai
 python-dotenv
 PyGithub
+tenacity
+slowapi
+async-lru
+pytest
+httpx

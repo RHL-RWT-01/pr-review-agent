@@ -33,6 +33,7 @@ class ReviewResult(BaseModel):
     summary: str = Field(..., description="Overall review summary")
     comments: List[ReviewComment] = Field(default_factory=list)
     stats: ReviewStats
+    errors: List[str] = Field(default_factory=list, description="List of errors encountered during review")
 
 
 class ReviewResponse(BaseModel):

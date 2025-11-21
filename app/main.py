@@ -2,10 +2,14 @@
 FastAPI application and endpoints for PR review agent
 """
 import os
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.schemas import (
     PRReviewRequest,
@@ -19,24 +23,33 @@ from app.orchestrator import review_diff
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Validate required environment variables
 if not os.getenv('OPEN_ROUTER_API_KEY'):
     raise ValueError("OPEN_ROUTER_API_KEY environment variable is required")
 
+# Initialize Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown"""
     # Startup
-    print("PR Review Agent starting up...")
-    print(f"   Model: {os.getenv('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3.1:free')}")
-    print(f"   GitHub Token: {'Set' if os.getenv('GITHUB_TOKEN') else 'Not set'}")
-    print(f"   Using: OpenRouter API (DeepSeek V3.1 - FREE)")
+    logger.info("PR Review Agent starting up...")
+    logger.info(f"   Model: {os.getenv('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3.1:free')}")
+    logger.info(f"   GitHub Token: {'Set' if os.getenv('GITHUB_TOKEN') else 'Not set'}")
+    logger.info(f"   Using: OpenRouter API (DeepSeek V3.1 - FREE)")
     
     yield
     
     # Shutdown
-    print("PR Review Agent shutting down...")
+    logger.info("PR Review Agent shutting down...")
 
 
 # Initialize FastAPI app
@@ -46,6 +59,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Set up Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add CORS middleware
 app.add_middleware(
@@ -77,12 +94,14 @@ async def health_check():
 
 
 @app.post("/review/pr", response_model=ReviewResponse)
-async def review_github_pr(request: PRReviewRequest):
+@limiter.limit("5/minute")
+async def review_github_pr(request: Request, pr_request: PRReviewRequest):
     """
     Review a GitHub pull request
     
     Args:
-        request: PR review request with GitHub PR URL
+        request: The raw request object (needed for rate limiting)
+        pr_request: PR review request with GitHub PR URL
         
     Returns:
         Review results with comments from all agents
@@ -92,8 +111,8 @@ async def review_github_pr(request: PRReviewRequest):
         github_client = GitHubClient()
         
         # Fetch PR diff
-        print(f"Fetching PR: {request.pr_url}")
-        diff = await github_client.fetch_pr_diff(request.pr_url)
+        logger.info(f"Fetching PR: {pr_request.pr_url}")
+        diff = await github_client.fetch_pr_diff(pr_request.pr_url)
         
         # Check diff size
         max_diff_size = int(os.getenv('MAX_DIFF_SIZE', 100000))
@@ -105,19 +124,19 @@ async def review_github_pr(request: PRReviewRequest):
         
         # Fetch PR metadata for context
         try:
-            metadata = await github_client.fetch_pr_metadata(request.pr_url)
+            metadata = await github_client.fetch_pr_metadata(pr_request.pr_url)
             context = f"PR: {metadata['title']}\nDescription: {metadata['description']}"
         except Exception as e:
-            print(f"Could not fetch PR metadata: {e}")
+            logger.warning(f"Could not fetch PR metadata: {e}")
             context = ""
         
         github_client.close()
         
         # Run review
-        print(f"Running multi-agent review...")
+        logger.info(f"Running multi-agent review...")
         review_result = await review_diff(diff, context)
         
-        print(f"Review complete: {review_result.stats.total_comments} comments")
+        logger.info(f"Review complete: {review_result.stats.total_comments} comments")
         
         return ReviewResponse(
             status="success",
@@ -130,7 +149,7 @@ async def review_github_pr(request: PRReviewRequest):
             detail=str(e)
         )
     except Exception as e:
-        print(f"Error reviewing PR: {e}")
+        logger.error(f"Error reviewing PR: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to review PR: {str(e)}"

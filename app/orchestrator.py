@@ -2,10 +2,14 @@
 Multi-agent orchestration: runs specialist agents and aggregates results
 """
 import asyncio
+import logging
 from typing import List
+from async_lru import alru_cache
 from app.schemas import ReviewComment, ReviewResult, ReviewStats
 from app.agents import logic_agent, security_agent, perf_agent, style_agent
 from app.utils import chunk_diff
+
+logger = logging.getLogger(__name__)
 
 
 async def orchestrate_review(diff: str, context: str = "") -> ReviewResult:
@@ -24,9 +28,11 @@ async def orchestrate_review(diff: str, context: str = "") -> ReviewResult:
     chunks = chunk_diff(diff, max_diff_size) if len(diff) > max_diff_size else [diff]
     
     all_comments = []
+    errors = []
     
     # Process each chunk
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        logger.info(f"Processing chunk {i+1}/{len(chunks)}...")
         # Run all agents in parallel for this chunk
         results = await asyncio.gather(
             logic_agent(chunk, context),
@@ -37,9 +43,12 @@ async def orchestrate_review(diff: str, context: str = "") -> ReviewResult:
         )
         
         # Collect comments, handling any exceptions
-        for result in results:
+        agent_names = ["logic", "security", "performance", "style"]
+        for j, result in enumerate(results):
             if isinstance(result, Exception):
-                print(f"Agent error: {str(result)}")
+                error_msg = f"Agent {agent_names[j]} failed: {str(result)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
                 continue
             all_comments.extend(result)
     
@@ -56,10 +65,14 @@ async def orchestrate_review(diff: str, context: str = "") -> ReviewResult:
     # Generate summary
     summary = _generate_summary(unique_comments, stats)
     
+    if errors:
+        summary += f"\n\nNote: {len(errors)} agent(s) failed during review."
+    
     return ReviewResult(
         summary=summary,
         comments=unique_comments,
-        stats=stats
+        stats=stats,
+        errors=errors
     )
 
 
@@ -153,9 +166,10 @@ def _generate_summary(comments: List[ReviewComment], stats: ReviewStats) -> str:
     return "\n".join(summary_parts)
 
 
+@alru_cache(maxsize=32)
 async def review_diff(diff: str, context: str = "") -> ReviewResult:
     """
-    Main entry point for reviewing a diff
+    Main entry point for reviewing a diff. Cached to avoid re-processing same diffs.
     
     Args:
         diff: Code diff to review
@@ -164,4 +178,5 @@ async def review_diff(diff: str, context: str = "") -> ReviewResult:
     Returns:
         Review result
     """
+    logger.info(f"Starting review for diff of length {len(diff)}")
     return await orchestrate_review(diff, context)
